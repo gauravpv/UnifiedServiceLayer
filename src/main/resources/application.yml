@@ -2,7 +2,7 @@ spring:
   application:
     name: bureau-dedupe-caching-service
   datasource:
-    url: jdbc:mysql://10.50.81.4:3306/usl_bre?sslMode=REQUIRED&enabledTLSProtocols=TLSv1.2&serverTimezone=UTC
+    url: jdbc:mysql://localhost:3306/usl_bre?sslMode=REQUIRED&enabledTLSProtocols=TLSv1.2&serverTimezone=UTC
     username: emipodutdb01admin
     password: J@rv!s@6789
     driver-class-name: com.mysql.cj.jdbc.Driver

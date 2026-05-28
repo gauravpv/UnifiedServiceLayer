@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "f1e2d3c4-bd-cache-bajaj-plaintext-2026",
     "name": "Bureau / Dedupe Caching Service",
-    "description": "Send the request body as plain JSON (`ProcessRequest`). The collection-level pre-request script encrypts it and wraps it in the envelope, then the test script decrypts the response and shows the inner ProcessResponse.\n\n## How to use\n\n1. Pick a request (Process - Bureau / Process - Dedupe / Process - Invalid).\n2. Edit the Body tab as **normal JSON**:\n   ```json\n   {\n     \"config\": { \"serviceName\": \"Bureau\", \"requestId\": \"REQ-1\" },\n     \"data\":   { \"firstName\": \"Krishna\", \"lastName\": \"Vamsi\" }\n   }\n   ```\n3. Hit Send.\n4. Check the **Test Results** tab for the decrypted response, or open the Postman Console (View -> Show Postman Console) to see both the encrypted envelope sent and the plaintext response received.\n\n## What the scripts do\n\n- **Pre-request (collection-level):** reads your raw body, AES-CBC-encrypts it (with the `+` -> `~` swap), and replaces the body with `{ request, reference_id, source_system }` envelope.\n- **Test (collection-level):** parses the envelope response, decrypts `response` if present, asserts the inner shape, and stores the plaintext in `lastDecryptedResponse`.\n\n## Variables\n\n| Variable        | Purpose                              | Default                            |\n|-----------------|--------------------------------------|------------------------------------|\n| `baseUrl`       | Service base URL                     | `http://localhost:8080`            |\n| `aesKey`        | AES-256 key (32 bytes)               | server default                     |\n| `aesIv`         | AES IV (16 bytes)                    | server default                     |\n| `referenceId`   | `reference_id` placed in envelope    | `REF-001`                          |\n| `sourceSystem`  | `source_system` placed in envelope   | `POSTMAN`                          |\n| `lastDecryptedResponse` | Filled by tests (read-only)  |                                    |\n",
+    "description": "Send the request body as plain JSON (`ProcessRequest`). The collection-level pre-request script encrypts it and wraps it in the envelope, then the test script decrypts the response and shows the inner ProcessResponse.\n\n## How to use\n\n1. Pick a request (Process - Bureau / Process - Dedupe / Process - Invalid / Stub - Bureau / Stub - Dedupe).\n2. Edit the Body tab as **normal JSON**:\n   ```json\n   {\n     \"config\": { \"serviceName\": \"Bureau\", \"requestId\": \"REQ-1\" },\n     \"data\":   { \"firstName\": \"Krishna\", \"lastName\": \"Vamsi\" }\n   }\n   ```\n3. Hit Send.\n4. Check the **Test Results** tab for the decrypted response, or open the Postman Console (View -> Show Postman Console) to see both the encrypted envelope sent and the plaintext response received.\n\n## What the scripts do\n\n- **Pre-request (collection-level):** for `/api/v1/process`, `/stub/bureau`, and `/stub/dedupe`, reads your raw body, AES-CBC-encrypts it (with the `+` -> `~` swap), and replaces the body with `{ request, reference_id, source_system }` envelope.\n- **Test (collection-level):** parses the envelope response, decrypts `response` if present, asserts the inner shape, and stores the plaintext in `lastDecryptedResponse`.\n\n## Variables\n\n| Variable        | Purpose                              | Default                            |\n|-----------------|--------------------------------------|------------------------------------|\n| `baseUrl`       | Service base URL                     | `http://localhost:8080`            |\n| `aesKey`        | AES-256 key (32 bytes)               | server default                     |\n| `aesIv`         | AES IV (16 bytes)                    | server default                     |\n| `referenceId`   | `reference_id` placed in envelope    | `REF-001`                          |\n| `sourceSystem`  | `source_system` placed in envelope   | `POSTMAN`                          |\n| `lastDecryptedResponse` | Filled by tests (read-only)  |                                    |\n",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -23,7 +23,8 @@
           "// AES-CBC encrypt it, and replace the body with the encrypted envelope.",
           "",
           "const url = pm.request.url.toString();",
-          "if (!url.includes('/api/v1/process')) {",
+          "const shouldEncrypt = ['/api/v1/service', '/stub/bureau', '/stub/dedupe'].some(p => url.includes(p));",
+          "if (!shouldEncrypt) {",
           "    return;",
           "}",
           "",
@@ -118,9 +119,9 @@
           { "key": "Content-Type", "value": "application/json" }
         ],
         "url": {
-          "raw": "{{baseUrl}}/api/v1/process",
+          "raw": "{{baseUrl}}/api/v1/service",
           "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "process"]
+          "path": ["api", "v1", "service"]
         },
         "body": {
           "mode": "raw",
@@ -138,9 +139,9 @@
           { "key": "Content-Type", "value": "application/json" }
         ],
         "url": {
-          "raw": "{{baseUrl}}/api/v1/process",
+          "raw": "{{baseUrl}}/api/v1/service",
           "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "process"]
+          "path": ["api", "v1", "service"]
         },
         "body": {
           "mode": "raw",
@@ -158,9 +159,9 @@
           { "key": "Content-Type", "value": "application/json" }
         ],
         "url": {
-          "raw": "{{baseUrl}}/api/v1/process",
+          "raw": "{{baseUrl}}/api/v1/service",
           "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "process"]
+          "path": ["api", "v1", "service"]
         },
         "body": {
           "mode": "raw",
@@ -178,9 +179,9 @@
           { "key": "Content-Type", "value": "application/json" }
         ],
         "url": {
-          "raw": "{{baseUrl}}/api/v1/process",
+          "raw": "{{baseUrl}}/api/v1/service",
           "host": ["{{baseUrl}}"],
-          "path": ["api", "v1", "process"]
+          "path": ["api", "v1", "service"]
         },
         "body": {
           "mode": "raw",
@@ -188,6 +189,46 @@
           "options": { "raw": { "language": "json" } }
         },
         "description": "Demonstrates the error envelope: `response` is null, `status_code` is `400`, `message` explains why."
+      }
+    },
+    {
+      "name": "Stub - Bureau (plaintext body -> encrypted downstream envelope)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/stub/bureau",
+          "host": ["{{baseUrl}}"],
+          "path": ["stub", "bureau"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"config\": {\n    \"serviceName\":     \"Bureau\",\n    \"orgName\":         \"B2C\",\n    \"channelName\":     \"SFDC\",\n    \"productName\":     \"PL\",\n    \"requestId\":       \"REQ-STUB-BUR-001\",\n    \"caseId\":          \"CASE-STUB-BUR-1001\",\n    \"requestedVersion\":\"v1\"\n  },\n  \"data\": {\n    \"firstName\":   \"Krishna\",\n    \"lastName\":    \"Vamsi\",\n    \"pan\":         \"ABCDE1234F\",\n    \"mobile\":      \"9999999999\",\n    \"dateOfBirth\": \"1990-01-01\"\n  }\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "description": "Calls local stub downstream directly. Body is plaintext ProcessRequest; collection pre-request encrypts and wraps it."
+      }
+    },
+    {
+      "name": "Stub - Dedupe (plaintext body -> encrypted downstream envelope)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/stub/dedupe",
+          "host": ["{{baseUrl}}"],
+          "path": ["stub", "dedupe"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"config\": {\n    \"serviceName\":   \"dedupe\",\n    \"orgName\":       \"B2C\",\n    \"channelName\":   \"SFDC\",\n    \"productName\":   \"PL\",\n    \"requestId\":     \"REQ-STUB-DED-001\",\n    \"caseId\":        \"CASE-STUB-DED-1001\",\n    \"requestedVersion\":\"v1\"\n  },\n  \"data\": {\n    \"firstName\": \"Krishna\",\n    \"lastName\":  \"Vamsi\",\n    \"mobile\":    \"9999999999\",\n    \"email\":     \"krishna@example.com\"\n  }\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "description": "Calls local stub downstream directly. Body is plaintext ProcessRequest; collection pre-request encrypts and wraps it."
       }
     }
   ]

@@ -7,6 +7,7 @@ import com.bajaj.dto.ProcessResponse;
 import com.bajaj.entity.BaseTransaction;
 import com.bajaj.entity.BureauTransaction;
 import com.bajaj.entity.DedupeTransaction;
+import com.bajaj.exception.DownstreamException;
 import com.bajaj.exception.ServiceNotSupportedException;
 import com.bajaj.repository.BureauTransactionRepository;
 import com.bajaj.repository.DedupeTransactionRepository;
@@ -64,7 +65,7 @@ public class CacheService {
             Function<String, Optional<T>> finder,
             UnaryOperator<T> saver,
             Supplier<T> factory,
-            Function<ProcessRequest, JsonNode> caller) {
+            Function<ProcessRequest, ProcessResponse> caller) {
 
         String hash = hashService.sha256(request.getData());
         Optional<T> existing = finder.apply(hash);
@@ -78,7 +79,12 @@ public class CacheService {
                 existing.isPresent() ? "HIT (stale)" : "MISS", btId, hash);
 
         Instant requestTs = Instant.now();
-        JsonNode body = caller.apply(request);
+        ProcessResponse downstreamResponse = caller.apply(request);
+        if (downstreamResponse == null || downstreamResponse.getData() == null) {
+            throw new DownstreamException("DOWNSTREAM_DATA_MISSING",
+                    btId + " downstream response does not contain data", 502);
+        }
+        JsonNode body = downstreamResponse.getData();
         Instant responseTs = Instant.now();
 
         T row = existing.orElseGet(factory);
@@ -91,7 +97,10 @@ public class CacheService {
         row.setBtId(btId);
         saver.apply(row);
 
-        return response(request, body);
+        return ProcessResponse.builder()
+                .config(resolveResponseConfig(request, downstreamResponse))
+                .data(body)
+                .build();
     }
 
     private boolean isFresh(BaseTransaction row) {
@@ -101,6 +110,13 @@ public class CacheService {
 
     private static ProcessResponse response(ProcessRequest req, JsonNode data) {
         return ProcessResponse.builder().config(req.getConfig()).data(data).build();
+    }
+
+    private static ConfigDto resolveResponseConfig(ProcessRequest request, ProcessResponse downstreamResponse) {
+        if (downstreamResponse != null && downstreamResponse.getConfig() != null) {
+            return downstreamResponse.getConfig();
+        }
+        return request.getConfig();
     }
 
     private byte[] writeJson(Object value) {
