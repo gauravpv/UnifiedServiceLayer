@@ -1,0 +1,194 @@
+{
+  "info": {
+    "_postman_id": "f1e2d3c4-bd-cache-bajaj-plaintext-2026",
+    "name": "Bureau / Dedupe Caching Service",
+    "description": "Send the request body as plain JSON (`ProcessRequest`). The collection-level pre-request script encrypts it and wraps it in the envelope, then the test script decrypts the response and shows the inner ProcessResponse.\n\n## How to use\n\n1. Pick a request (Process - Bureau / Process - Dedupe / Process - Invalid).\n2. Edit the Body tab as **normal JSON**:\n   ```json\n   {\n     \"config\": { \"serviceName\": \"Bureau\", \"requestId\": \"REQ-1\" },\n     \"data\":   { \"firstName\": \"Krishna\", \"lastName\": \"Vamsi\" }\n   }\n   ```\n3. Hit Send.\n4. Check the **Test Results** tab for the decrypted response, or open the Postman Console (View -> Show Postman Console) to see both the encrypted envelope sent and the plaintext response received.\n\n## What the scripts do\n\n- **Pre-request (collection-level):** reads your raw body, AES-CBC-encrypts it (with the `+` -> `~` swap), and replaces the body with `{ request, reference_id, source_system }` envelope.\n- **Test (collection-level):** parses the envelope response, decrypts `response` if present, asserts the inner shape, and stores the plaintext in `lastDecryptedResponse`.\n\n## Variables\n\n| Variable        | Purpose                              | Default                            |\n|-----------------|--------------------------------------|------------------------------------|\n| `baseUrl`       | Service base URL                     | `http://localhost:8080`            |\n| `aesKey`        | AES-256 key (32 bytes)               | server default                     |\n| `aesIv`         | AES IV (16 bytes)                    | server default                     |\n| `referenceId`   | `reference_id` placed in envelope    | `REF-001`                          |\n| `sourceSystem`  | `source_system` placed in envelope   | `POSTMAN`                          |\n| `lastDecryptedResponse` | Filled by tests (read-only)  |                                    |\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",       "value": "http://localhost:8080",                        "type": "string" },
+    { "key": "aesKey",        "value": ")H@McQfTjWnZr4u7x!A&C*F-JaNdRgUk",              "type": "string" },
+    { "key": "aesIv",         "value": "w9z$C&F)J@NcRfUj",                              "type": "string" },
+    { "key": "referenceId",   "value": "REF-001",                                       "type": "string" },
+    { "key": "sourceSystem",  "value": "POSTMAN",                                       "type": "string" },
+    { "key": "lastDecryptedResponse", "value": "",                                      "type": "string" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Collection-level pre-request: take the plaintext JSON body the user typed,",
+          "// AES-CBC encrypt it, and replace the body with the encrypted envelope.",
+          "",
+          "const url = pm.request.url.toString();",
+          "if (!url.includes('/api/v1/process')) {",
+          "    return;",
+          "}",
+          "",
+          "const rawBody = pm.request.body && pm.request.body.raw;",
+          "if (!rawBody || !rawBody.trim()) {",
+          "    console.warn('[pre-request] body is empty - nothing to encrypt');",
+          "    return;",
+          "}",
+          "",
+          "// Validate JSON early so we get a clean error instead of garbage ciphertext.",
+          "try { JSON.parse(rawBody); }",
+          "catch (e) { throw new Error('Request body is not valid JSON: ' + e.message); }",
+          "",
+          "const key = CryptoJS.enc.Utf8.parse(pm.collectionVariables.get('aesKey'));",
+          "const iv  = CryptoJS.enc.Utf8.parse(pm.collectionVariables.get('aesIv'));",
+          "",
+          "const plaintext = rawBody.replace(/\\+/g, '~');",
+          "const ciphertext = CryptoJS.AES.encrypt(",
+          "    CryptoJS.enc.Utf8.parse(plaintext),",
+          "    key,",
+          "    { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }",
+          ").toString();",
+          "",
+          "const envelope = {",
+          "    request:       ciphertext,",
+          "    reference_id:  pm.collectionVariables.get('referenceId')  || ('REF-' + Date.now()),",
+          "    source_system: pm.collectionVariables.get('sourceSystem') || 'POSTMAN'",
+          "};",
+          "",
+          "pm.collectionVariables.set('lastPlaintextRequest', rawBody);",
+          "pm.request.body.raw = JSON.stringify(envelope);",
+          "",
+          "console.log('[pre-request] plaintext  =', rawBody);",
+          "console.log('[pre-request] envelope   =', envelope);"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Collection-level test: validate envelope shape, decrypt `response` if present.",
+          "",
+          "let json;",
+          "try { json = pm.response.json(); }",
+          "catch (e) { throw new Error('Response is not valid JSON: ' + pm.response.text()); }",
+          "",
+          "pm.test('envelope has status_code + message', function () {",
+          "    pm.expect(json).to.have.property('status_code');",
+          "    pm.expect(json).to.have.property('message');",
+          "});",
+          "",
+          "if (json.response) {",
+          "    const key = CryptoJS.enc.Utf8.parse(pm.collectionVariables.get('aesKey'));",
+          "    const iv  = CryptoJS.enc.Utf8.parse(pm.collectionVariables.get('aesIv'));",
+          "    const ct  = json.response.replace(/~/g, '+');",
+          "",
+          "    const plaintext = CryptoJS.AES.decrypt(",
+          "        ct, key, { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }",
+          "    ).toString(CryptoJS.enc.Utf8);",
+          "",
+          "    pm.collectionVariables.set('lastDecryptedResponse', plaintext);",
+          "    console.log('[test] decrypted =', plaintext);",
+          "",
+          "    pm.test('decrypted response is JSON with config + data', function () {",
+          "        const inner = JSON.parse(plaintext);",
+          "        pm.expect(inner).to.have.property('config');",
+          "        pm.expect(inner).to.have.property('data');",
+          "    });",
+          "",
+          "    pm.test('status_code is 200 and bre_tat ends with ms', function () {",
+          "        pm.expect(json.status_code).to.eql('200');",
+          "        pm.expect(json.bre_tat).to.match(/^\\d+ms$/);",
+          "    });",
+          "} else {",
+          "    pm.test('error envelope has non-200 status_code', function () {",
+          "        pm.expect(json.status_code).to.not.eql('200');",
+          "    });",
+          "    console.warn('[test] error envelope =', json);",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Process - Bureau (plaintext body)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/process",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "process"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"config\": {\n    \"serviceName\":     \"Bureau\",\n    \"orgName\":         \"B2C\",\n    \"channelName\":     \"SFDC\",\n    \"productName\":     \"PL\",\n    \"requestId\":       \"REQ-001\",\n    \"caseId\":          \"CASE-1001\",\n    \"requestedVersion\":\"v1\"\n  },\n  \"data\": {\n    \"firstName\":   \"Krishna\",\n    \"lastName\":    \"Vamsi\",\n    \"pan\":         \"ABCDE1234F\",\n    \"mobile\":      \"9999999999\",\n    \"dateOfBirth\": \"1990-01-01\"\n  }\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "description": "Edit the body as plain JSON. The pre-request script will encrypt it and wrap it in the envelope before sending."
+      }
+    },
+    {
+      "name": "Process - Bureau (same body -> cache HIT)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/process",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "process"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"config\": {\n    \"serviceName\":     \"Bureau\",\n    \"orgName\":         \"B2C\",\n    \"requestId\":       \"REQ-001-REPLAY\"\n  },\n  \"data\": {\n    \"firstName\":   \"Krishna\",\n    \"lastName\":    \"Vamsi\",\n    \"pan\":         \"ABCDE1234F\",\n    \"mobile\":      \"9999999999\",\n    \"dateOfBirth\": \"1990-01-01\"\n  }\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "description": "Same `data` block as the first request, so the request hash matches and you get an instant cache HIT (`bre_tat` near 0ms)."
+      }
+    },
+    {
+      "name": "Process - Dedupe (plaintext body)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/process",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "process"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"config\": {\n    \"serviceName\":   \"dedupe\",\n    \"orgName\":       \"B2C\",\n    \"requestId\":     \"REQ-DD-001\"\n  },\n  \"data\": {\n    \"firstName\": \"Krishna\",\n    \"lastName\":  \"Vamsi\",\n    \"mobile\":    \"9999999999\",\n    \"email\":     \"krishna@example.com\"\n  }\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "description": "Routes to `dedupe_bre_details` table (BT_ID=DEDUPE)."
+      }
+    },
+    {
+      "name": "Process - Invalid serviceName (expect 400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/process",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v1", "process"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"config\": { \"serviceName\": \"foobar\" },\n  \"data\":   { \"x\": 1 }\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "description": "Demonstrates the error envelope: `response` is null, `status_code` is `400`, `message` explains why."
+      }
+    }
+  ]
+}

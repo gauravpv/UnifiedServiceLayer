@@ -1,0 +1,66 @@
+# Maven build output
+target/
+*.jar
+*.war
+*.ear
+!.mvn/wrapper/maven-wrapper.jar
+*.versionsBackup
+release.properties
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.next
+buildNumber.properties
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Eclipse / STS
+.project
+.classpath
+.settings/
+.springBeans
+.factorypath
+bin/
+
+# VS Code
+.vscode/
+
+# NetBeans
+nb-configuration.xml
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+
+# Logs
+*.log
+logs/
+
+# Local config / secrets
+.env
+.env.*
+application-local.yml
+application-local.properties
+*.local.properties
+secrets/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node (newman / postman tooling)
+node_modules/
+package.json
+package-lock.json
+
+# Spring Boot devtools
+.spring-boot-devtools.properties
+
+# HotSpot crash logs
+hs_err_pid*
+replay_pid*

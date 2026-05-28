@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: bureau-dedupe-caching-service
+  datasource:
+    url: jdbc:mysql://10.50.81.4:3306/usl_bre?sslMode=REQUIRED&enabledTLSProtocols=TLSv1.2&serverTimezone=UTC
+    username: emipodutdb01admin
+    password: J@rv!s@6789
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        jdbc.time_zone: UTC
+        format_sql: true
+    open-in-view: false
+  sql:
+    init:
+      mode: never
+
+server:
+  port: 8080
+
+app:
+  cache:
+    staleness-days: 30
+  downstream:
+    bureau-url: ${BUREAU_API_URL:http://localhost:9090/bureau/v1/lookup}
+    dedupe-url: ${DEDUPE_API_URL:http://localhost:9090/dedupe/v1/lookup}
+    connect-timeout-ms: 3000
+    read-timeout-ms: 15000
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+
+logging:
+  level:
+    com.bajaj: INFO
+    org.springframework.web: INFO
+    org.hibernate.SQL: INFO

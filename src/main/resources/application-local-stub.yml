@@ -1,0 +1,4 @@
+app:
+  downstream:
+    bureau-url: http://localhost:${server.port:8080}/stub/bureau
+    dedupe-url: http://localhost:${server.port:8080}/stub/dedupe
