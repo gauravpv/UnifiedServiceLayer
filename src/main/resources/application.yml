@@ -4,7 +4,6 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/usl_bre?sslMode=REQUIRED&enabledTLSProtocols=TLSv1.2&serverTimezone=UTC
     username: emipodutdb01admin
-    password: J@rv!s@6789
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
