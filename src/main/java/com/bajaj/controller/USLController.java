@@ -8,10 +8,11 @@ import com.bajaj.exception.BadRequestException;
 import com.bajaj.exception.CryptoException;
 import com.bajaj.security.EncryptionAspect;
 import com.bajaj.service.CacheService;
+import com.bajaj.service.UslBreTransactionService;
+import com.bajaj.util.ProcessTimingContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,13 +20,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Slf4j
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
 public class USLController {
 
     private final CacheService cacheService;
+    private final UslBreTransactionService uslBreTransactionService;
     private final ObjectMapper objectMapper;
 
     @PostMapping(value = "/service",
@@ -33,12 +34,18 @@ public class USLController {
             produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<EncryptedResponseEnvelope> process(@Valid @RequestBody EncryptedRequestEnvelope envelope) {
         long start = System.currentTimeMillis();
-        log.info("POST /api/v1/process reference_id={} source_system={}",
+        ProcessTimingContext timing = new ProcessTimingContext(
                 envelope.getReferenceId(), envelope.getSourceSystem());
 
         ProcessRequest request = parse(decrypt(envelope.getRequest()));
-        ProcessResponse response = cacheService.process(request);
+        if (request.getConfig() != null) {
+            timing.setServiceName(request.getConfig().getServiceName());
+        }
+
+        ProcessResponse response = cacheService.process(request, timing);
         String encrypted = encrypt(response);
+        timing.markResponseReturned();
+        uslBreTransactionService.record(request, response, timing, "SUCCESS");
 
         return ResponseEntity.ok(EncryptedResponseEnvelope.builder()
                 .response(encrypted)

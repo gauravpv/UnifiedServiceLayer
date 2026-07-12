@@ -11,10 +11,10 @@ import com.bajaj.exception.DownstreamException;
 import com.bajaj.exception.ServiceNotSupportedException;
 import com.bajaj.repository.BureauTransactionRepository;
 import com.bajaj.repository.DedupeTransactionRepository;
+import com.bajaj.util.ProcessTimingContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,7 +26,6 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CacheService {
@@ -39,7 +38,7 @@ public class CacheService {
     private final DownstreamClient downstream;
 
     @Transactional
-    public ProcessResponse process(ProcessRequest request) {
+    public ProcessResponse process(ProcessRequest request, ProcessTimingContext timing) {
         ConfigDto config = request.getConfig();
         if (config == null || config.getServiceName() == null || config.getServiceName().isBlank()) {
             throw new ServiceNotSupportedException("config.serviceName is required (Bureau or dedupe)");
@@ -48,11 +47,13 @@ public class CacheService {
             throw new ServiceNotSupportedException("data block is required");
         }
 
+        timing.setServiceName(config.getServiceName());
+
         return switch (config.getServiceName().trim().toLowerCase()) {
-            case "bureau" -> handle(request, "BUREAU",
+            case "bureau" -> handle(request, "BUREAU", timing,
                     bureauRepo::findTopByRequestHashOrderByResponseTimestampDesc,
                     bureauRepo::save, BureauTransaction::new, downstream::callBureau);
-            case "dedupe" -> handle(request, "DEDUPE",
+            case "dedupe" -> handle(request, "DEDUPE", timing,
                     dedupeRepo::findTopByRequestHashOrderByResponseTimestampDesc,
                     dedupeRepo::save, DedupeTransaction::new, downstream::callDedupe);
             default -> throw new ServiceNotSupportedException(
@@ -61,25 +62,33 @@ public class CacheService {
     }
 
     private <T extends BaseTransaction> ProcessResponse handle(
-            ProcessRequest request, String btId,
+            ProcessRequest request, String btId, ProcessTimingContext timing,
             Function<String, Optional<T>> finder,
             UnaryOperator<T> saver,
             Supplier<T> factory,
             Function<ProcessRequest, ProcessResponse> caller) {
 
         String hash = hashService.sha256(request.getData());
-        Optional<T> existing = finder.apply(hash);
+        timing.setBtId(btId);
+        timing.setRequestHash(hash);
 
-        if (existing.isPresent() && isFresh(existing.get())) {
-            log.info("Cache HIT (fresh) bt={} hash={}", btId, hash);
+        timing.markDbSearchStart();
+        Optional<T> existing = finder.apply(hash);
+        boolean found = existing.isPresent();
+
+        if (found && isFresh(existing.get())) {
+            timing.markDbSearchEnd(true, "FRESH_HIT");
             return response(request, readJson(existing.get().getResponseJson()));
         }
 
-        log.info("Cache {} bt={} hash={} -> downstream",
-                existing.isPresent() ? "HIT (stale)" : "MISS", btId, hash);
+        String outcome = found ? "STALE_HIT" : "MISS";
+        timing.markDbSearchEnd(found, outcome);
 
+        timing.markDownstreamCallStart();
         Instant requestTs = Instant.now();
         ProcessResponse downstreamResponse = caller.apply(request);
+        timing.markDownstreamCallEnd();
+
         if (downstreamResponse == null || downstreamResponse.getData() == null) {
             throw new DownstreamException("DOWNSTREAM_DATA_MISSING",
                     btId + " downstream response does not contain data", 502);
@@ -87,6 +96,7 @@ public class CacheService {
         JsonNode body = downstreamResponse.getData();
         Instant responseTs = Instant.now();
 
+        timing.markDbSaveStart();
         T row = existing.orElseGet(factory);
         row.setRequestJson(writeJson(request));
         row.setRequestHash(hash);
@@ -96,6 +106,7 @@ public class CacheService {
         row.setResponseTimestamp(responseTs);
         row.setBtId(btId);
         saver.apply(row);
+        timing.markDbSaveEnd();
 
         return ProcessResponse.builder()
                 .config(resolveResponseConfig(request, downstreamResponse))

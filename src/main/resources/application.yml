@@ -39,6 +39,8 @@ springdoc:
     tags-sorter: alpha
 
 logging:
+  file:
+    name: logs/application.log
   level:
     com.bajaj: INFO
     org.springframework.web: INFO
