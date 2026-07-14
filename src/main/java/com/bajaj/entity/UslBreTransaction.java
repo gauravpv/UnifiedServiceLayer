@@ -30,14 +30,14 @@ public class UslBreTransaction {
     @Column(name = "SOURCE_SYSTEM", length = 50)
     private String sourceSystem;
 
-    @Column(name = "REQUEST_JSON", columnDefinition = "mediumblob")
+    @Column(name = "REQUEST_JSON", columnDefinition = "bytea")
     @JdbcTypeCode(SqlTypes.VARBINARY)
     private byte[] requestJson;
 
     @Column(name = "REQUEST_HASH", length = 255)
     private String requestHash;
 
-    @Column(name = "RESPONSE_JSON", columnDefinition = "mediumblob")
+    @Column(name = "RESPONSE_JSON", columnDefinition = "bytea")
     @JdbcTypeCode(SqlTypes.VARBINARY)
     private byte[] responseJson;
 

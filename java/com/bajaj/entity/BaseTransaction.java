@@ -22,14 +22,14 @@ public abstract class BaseTransaction {
     @Column(name = "ID")
     private Long id;
 
-    @Column(name = "REQUEST_JSON", columnDefinition = "bytea")
+    @Column(name = "REQUEST_JSON", columnDefinition = "mediumblob")
     @JdbcTypeCode(SqlTypes.VARBINARY)
     private byte[] requestJson;
 
     @Column(name = "REQUEST_HASH", length = 255)
     private String requestHash;
 
-    @Column(name = "RESPONSE_JSON", columnDefinition = "bytea")
+    @Column(name = "RESPONSE_JSON", columnDefinition = "mediumblob")
     @JdbcTypeCode(SqlTypes.VARBINARY)
     private byte[] responseJson;
 

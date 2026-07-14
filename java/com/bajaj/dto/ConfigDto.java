@@ -20,5 +20,4 @@ public class ConfigDto {
     private String requestedVersion;
     private String requestTimestamp;
     private String serviceName;
-    private String sourceSystem;
 }

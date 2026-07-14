@@ -35,7 +35,6 @@ import com.bajaj.dto.ProcessResponse;
 import com.bajaj.exception.CryptoException;
 import com.bajaj.exception.DownstreamException;
 import com.bajaj.security.EncryptionAspect;
-import com.bajaj.util.AESUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import lombok.RequiredArgsConstructor;
@@ -61,16 +60,13 @@ public class WebClientService {
 
         try {
             ProcessRequest outboundRequest = buildOutboundRequest(request);
-            log.info("[{}] Outbound request: {}", label, outboundRequest);
             String plaintext = objectMapper.writeValueAsString(outboundRequest);
-            String encryptedPayload = AESUtil.encrypt(plaintext, ")H@McQfTjWnZr4u7x!A%C*F-JaNdRgUk", "w9z$C&F)J@NcRfUj");
-            log.info("[{}] Encrypted outbound request: {}", label, encryptedPayload);
+            String encryptedPayload = EncryptionAspect.encrypt(plaintext);
 
             DownstreamEncryptedRequest envelope = DownstreamEncryptedRequest.builder()
                     .request(encryptedPayload)
                     .build();
             HttpHeaders outboundHeaders = getHeaders();
-            log.info("[{}] Outbound headers: {}", label, outboundHeaders);
 
             log.info("[{}] POST {} (encrypted request envelope)", label, url);
             EncryptedResponseEnvelope encryptedResponse = webClientBuilder.build()
@@ -112,7 +108,6 @@ public class WebClientService {
                 .caseId(inCfg.getCaseId())
                 .requestedVersion(inCfg.getRequestedVersion())
                 .requestTimestamp(inCfg.getRequestTimestamp())
-                .sourceSystem("USL")
                 .build();
 
         return ProcessRequest.builder()
@@ -128,7 +123,7 @@ public class WebClientService {
         }
 
         try {
-            String decrypted = AESUtil.decrypt(encryptedResponse.getResponse(), ")H@McQfTjWnZr4u7x!A%C*F-JaNdRgUk", "w9z$C&F)J@NcRfUj");
+            String decrypted = EncryptionAspect.decrypt(encryptedResponse.getResponse());
             ProcessResponse decryptedResponse = objectMapper.readValue(decrypted, ProcessResponse.class);
             if (decryptedResponse == null || decryptedResponse.getData() == null) {
                 throw new DownstreamException("DOWNSTREAM_DATA_MISSING",
