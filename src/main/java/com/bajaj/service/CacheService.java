@@ -15,6 +15,7 @@ import com.bajaj.util.ProcessTimingContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +27,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CacheService {
@@ -53,12 +55,56 @@ public class CacheService {
             case "bureau" -> handle(request, "BUREAU", timing,
                     bureauRepo::findTopByRequestHashOrderByResponseTimestampDesc,
                     bureauRepo::save, BureauTransaction::new, downstream::callBureau);
-            case "dedupe" -> handle(request, "DEDUPE", timing,
-                    dedupeRepo::findTopByRequestHashOrderByResponseTimestampDesc,
+            case "dedupe" -> handleDirect(request, "DEDUPE", timing,
                     dedupeRepo::save, DedupeTransaction::new, downstream::callDedupe);
             default -> throw new ServiceNotSupportedException(
                     "Unsupported serviceName='" + config.getServiceName() + "'. Allowed: Bureau, dedupe.");
         };
+    }
+
+    private <T extends BaseTransaction> ProcessResponse handleDirect(
+            ProcessRequest request, String btId, ProcessTimingContext timing,
+            UnaryOperator<T> saver,
+            Supplier<T> factory,
+            Function<ProcessRequest, ProcessResponse> caller) {
+
+        String hash = hashService.sha256(request.getData());
+        timing.setBtId(btId);
+        timing.setRequestHash(hash);
+
+        timing.markDbSearchStart();
+        timing.markDbSearchEnd(false, "CACHE_BYPASS");
+
+        log.info("Cache data found=false (cache bypassed) bt={} hash={} -> calling downstream", btId, hash);
+
+        timing.markDownstreamCallStart();
+        Instant requestTs = Instant.now();
+        ProcessResponse downstreamResponse = caller.apply(request);
+        timing.markDownstreamCallEnd();
+
+        if (downstreamResponse == null || downstreamResponse.getData() == null) {
+            throw new DownstreamException("DOWNSTREAM_DATA_MISSING",
+                    btId + " downstream response does not contain data", 502);
+        }
+        JsonNode body = downstreamResponse.getData();
+        Instant responseTs = Instant.now();
+
+        timing.markDbSaveStart();
+        T row = factory.get();
+        row.setRequestJson(writeJson(request));
+        row.setRequestHash(hash);
+        row.setResponseJson(writeJson(body));
+        row.setStatus("SUCCESS");
+        row.setRequestTimestamp(requestTs);
+        row.setResponseTimestamp(responseTs);
+        row.setBtId(btId);
+        saver.apply(row);
+        timing.markDbSaveEnd();
+
+        return ProcessResponse.builder()
+                .config(resolveResponseConfig(request, downstreamResponse))
+                .data(body)
+                .build();
     }
 
     private <T extends BaseTransaction> ProcessResponse handle(
@@ -78,11 +124,15 @@ public class CacheService {
 
         if (found && isFresh(existing.get())) {
             timing.markDbSearchEnd(true, "FRESH_HIT");
+            log.info("Cache data found=true (fresh) bt={} hash={} -> returning cached response", btId, hash);
             return response(request, readJson(existing.get().getResponseJson()));
         }
 
         String outcome = found ? "STALE_HIT" : "MISS";
         timing.markDbSearchEnd(found, outcome);
+
+        log.info("Cache data found={} outcome={} bt={} hash={} -> calling downstream",
+                found, outcome, btId, hash);
 
         timing.markDownstreamCallStart();
         Instant requestTs = Instant.now();

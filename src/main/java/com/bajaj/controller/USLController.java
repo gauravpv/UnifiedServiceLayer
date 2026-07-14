@@ -9,7 +9,6 @@ import com.bajaj.exception.CryptoException;
 import com.bajaj.security.EncryptionAspect;
 import com.bajaj.service.CacheService;
 import com.bajaj.service.UslBreTransactionService;
-import com.bajaj.util.AESUtil;
 import com.bajaj.util.ProcessTimingContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
@@ -58,7 +57,7 @@ public class USLController {
 
     private String decrypt(String ciphertext) {
         try {
-            return AESUtil.decrypt(ciphertext, ")H@McQfTjWnZr4u7x!A%C*F-JaNdRgUk", "w9z$C&F)J@NcRfUj");
+            return EncryptionAspect.decrypt(ciphertext);
         } catch (Exception e) {
             throw new CryptoException("Failed to decrypt request", e);
         }
@@ -66,7 +65,7 @@ public class USLController {
 
     private String encrypt(ProcessResponse response) {
         try {
-            return AESUtil.encrypt(objectMapper.writeValueAsString(response), ")H@McQfTjWnZr4u7x!A%C*F-JaNdRgUk", "w9z$C&F)J@NcRfUj");
+            return EncryptionAspect.encrypt(objectMapper.writeValueAsString(response));
         } catch (Exception e) {
             throw new CryptoException("Failed to encrypt response", e);
         }
