@@ -16,3 +16,6 @@ CREATE INDEX IF NOT EXISTS idx_dedupe_bre_request_hash
 
 CREATE INDEX IF NOT EXISTS idx_dedupe_bre_response_ts
     ON dedupe_bre_details (RESPONSE_TIMESTAMP);
+
+CREATE INDEX idx_bureau_bre_hash_response_ts
+  ON bureau_bre_details (REQUEST_HASH, RESPONSE_TIMESTAMP DESC);
