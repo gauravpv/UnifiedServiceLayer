@@ -21,7 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import com.bajaj.config.AppProperties;
+import com.bajaj.config.GatewayAuthConfig;
 import com.bajaj.dto.AzureTokenResponse;
 import com.bajaj.dto.ConfigDto;
 import com.bajaj.dto.DownstreamEncryptedRequest;
@@ -43,7 +43,7 @@ public class WebClientService {
 
     private final WebClient downstreamWebClient;
     private final ObjectMapper objectMapper;
-    private final AppProperties appProperties;
+    private final GatewayAuthConfig gatewayAuth;
 
     private volatile AzureTokenResponse azureTokenResponse;
     private volatile Instant tokenExpiresAt = Instant.MIN;
@@ -142,12 +142,11 @@ public class WebClientService {
     }
 
     private HttpHeaders getHeaders() {
-        AppProperties.Gateway gateway = appProperties.getGateway();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-        if (gateway.hasOcpSubKey()) {
-            headers.add(OCP_KEY_HEADER, gateway.getOcpSubKey());
+        if (gatewayAuth.hasOcpSubKey()) {
+            headers.add(OCP_KEY_HEADER, gatewayAuth.ocpSubKey());
         }
         getToken().ifPresent(token -> headers.add(AUTHORIZATION_HEADER, BEARER + token.getAccess_token()));
         return headers;
@@ -155,14 +154,13 @@ public class WebClientService {
 
     @SuppressWarnings("null")
     private Optional<AzureTokenResponse> getToken() {
-        AppProperties.Gateway gateway = appProperties.getGateway();
-        if (!gateway.hasTokenCredentials()) {
+        if (!gatewayAuth.hasTokenCredentials()) {
             return Optional.empty();
         }
 
-        String tokenUrl = gateway.getAuthTokenUrl();
-        String clientId = gateway.getAuthClientId();
-        String clientSecret = gateway.getAuthClientSecret();
+        String tokenUrl = gatewayAuth.authTokenUrl();
+        String clientId = gatewayAuth.authClientId();
+        String clientSecret = gatewayAuth.authClientSecret();
         tokenUrl = Objects.requireNonNull(tokenUrl);
         clientId = Objects.requireNonNull(clientId);
         clientSecret = Objects.requireNonNull(clientSecret);

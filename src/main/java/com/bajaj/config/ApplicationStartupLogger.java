@@ -16,6 +16,7 @@ import java.nio.file.Paths;
 public class ApplicationStartupLogger {
 
     private final AppProperties appProperties;
+    private final GatewayAuthConfig gatewayAuth;
     private final Environment environment;
 
     @Value("${logging.file.name:logs/application.log}")
@@ -34,11 +35,12 @@ public class ApplicationStartupLogger {
         log.info("Bureau URL: {}", appProperties.getDownstream().getBureauUrl());
         log.info("Dedupe URL: {}", appProperties.getDownstream().getDedupeUrl());
         log.info("Cache staleness days: {}", appProperties.getCache().getStalenessDays());
-        AppProperties.Gateway gateway = appProperties.getGateway();
-        log.info("Gateway OCP key configured: {}", gateway.hasOcpSubKey());
-        log.info("Gateway token configured: {}", gateway.hasTokenCredentials());
-        if (gateway.hasTokenCredentials()) {
-            log.info("Gateway token URL: {}", gateway.getAuthTokenUrl());
+        log.info("Gateway OCP key configured: {}", gatewayAuth.hasOcpSubKey());
+        log.info("Gateway token configured: {}", gatewayAuth.hasTokenCredentials());
+        if (gatewayAuth.hasTokenCredentials()) {
+            log.info("Gateway token URL: {}", gatewayAuth.authTokenUrl());
+        } else {
+            log.warn("Gateway auth missing. Set app.gateway.* or root keys ocp_sub_key/auth_client_id/auth_client_secret/auth_token_url in application.yml");
         }
         log.info("========================================");
     }
