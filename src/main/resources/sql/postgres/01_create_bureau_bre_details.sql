@@ -10,6 +10,7 @@
 CREATE TABLE IF NOT EXISTS bureau_bre_details (
     ID                 BIGSERIAL,
     REQUEST_JSON       BYTEA,
+    HASH_JSON          BYTEA,
     REQUEST_HASH       VARCHAR(255),
     RESPONSE_JSON      BYTEA,
     STATUS             VARCHAR(20),

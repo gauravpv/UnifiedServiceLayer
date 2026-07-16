@@ -45,7 +45,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class WebClientService {
 
-    private final WebClient.Builder webClientBuilder;
+    private final WebClient downstreamWebClient;
     private final Environment env;
     private final ObjectMapper objectMapper;
 
@@ -60,19 +60,23 @@ public class WebClientService {
 
         try {
             ProcessRequest outboundRequest = buildOutboundRequest(request);
-            log.info("[{}] Outbound request: {}", label, outboundRequest);
+            ConfigDto cfg = outboundRequest.getConfig();
+            String requestId = cfg != null ? cfg.getRequestId() : null;
+            String caseId = cfg != null ? cfg.getCaseId() : null;
+            log.debug("[{}] Outbound request: {}", label, outboundRequest);
+
             String plaintext = objectMapper.writeValueAsString(outboundRequest);
             String encryptedPayload = EncryptionAspect.encrypt(plaintext);
-            log.info("[{}] Encrypted outbound request: {}", label, encryptedPayload);
+            log.debug("[{}] Encrypted outbound request: {}", label, encryptedPayload);
 
             DownstreamEncryptedRequest envelope = DownstreamEncryptedRequest.builder()
                     .request(encryptedPayload)
                     .build();
             HttpHeaders outboundHeaders = getHeaders();
-            log.info("[{}] Outbound headers: {}", label, outboundHeaders);
+            log.debug("[{}] Outbound headers: {}", label, outboundHeaders);
 
-            log.info("[{}] POST {} (encrypted request envelope)", label, url);
-            EncryptedResponseEnvelope encryptedResponse = webClientBuilder.build()
+            log.info("[{}] POST {} requestId={} caseId={}", label, url, requestId, caseId);
+            EncryptedResponseEnvelope encryptedResponse = downstreamWebClient
                     .post()
                     .uri(url)
                     .headers(headers -> headers.addAll(outboundHeaders))
@@ -174,8 +178,8 @@ public class WebClientService {
                 return Optional.of(azureTokenResponse);
             }
 
-            log.info("Fetching gateway token");
-            AzureTokenResponse token = webClientBuilder.build()
+            log.debug("Fetching gateway token");
+            AzureTokenResponse token = downstreamWebClient
                     .post()
                     .uri(tokenUrl)
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)

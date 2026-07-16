@@ -9,6 +9,7 @@
 CREATE TABLE IF NOT EXISTS bureau_bre_details (
     ID                 BIGINT          NOT NULL AUTO_INCREMENT,
     REQUEST_JSON       MEDIUMBLOB      NULL,
+    HASH_JSON          MEDIUMBLOB      NULL,
     REQUEST_HASH       VARCHAR(255)    NULL,
     RESPONSE_JSON      MEDIUMBLOB      NULL,
     STATUS             VARCHAR(20)     NULL,

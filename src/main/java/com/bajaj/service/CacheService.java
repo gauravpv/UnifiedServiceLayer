@@ -11,15 +11,14 @@ import com.bajaj.exception.DownstreamException;
 import com.bajaj.exception.ServiceNotSupportedException;
 import com.bajaj.repository.BureauTransactionRepository;
 import com.bajaj.repository.DedupeTransactionRepository;
+import com.bajaj.util.BureauHashPayloadPreparer;
 import com.bajaj.util.ProcessTimingContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
@@ -32,14 +31,18 @@ import java.util.function.UnaryOperator;
 @RequiredArgsConstructor
 public class CacheService {
 
+    private static final String CACHE_OUTCOME_HIT = "CACHE";
+    private static final String CACHE_OUTCOME_MISS = "MISS";
+
     private final HashService hashService;
+    private final BureauHashPayloadPreparer bureauHashPayloadPreparer;
     private final ObjectMapper objectMapper;
     private final AppProperties props;
     private final BureauTransactionRepository bureauRepo;
     private final DedupeTransactionRepository dedupeRepo;
     private final DownstreamClient downstream;
+    private final CacheTransactionService cacheTransactions;
 
-    @Transactional
     public ProcessResponse process(ProcessRequest request, ProcessTimingContext timing) {
         ConfigDto config = request.getConfig();
         if (config == null || config.getServiceName() == null || config.getServiceName().isBlank()) {
@@ -55,7 +58,7 @@ public class CacheService {
             case "bureau" -> handle(request, "BUREAU", timing,
                     bureauRepo::findTopByRequestHashOrderByResponseTimestampDesc,
                     bureauRepo::save, BureauTransaction::new, downstream::callBureau);
-            case "dedupe" -> handleDirect(request, "DEDUPE", timing,
+            case "dedupe" -> handleDirect(request, "DEDUPE", timing, hashService::sha256,
                     dedupeRepo::save, DedupeTransaction::new, downstream::callDedupe);
             default -> throw new ServiceNotSupportedException(
                     "Unsupported serviceName='" + config.getServiceName() + "'. Allowed: Bureau, dedupe.");
@@ -64,18 +67,19 @@ public class CacheService {
 
     private <T extends BaseTransaction> ProcessResponse handleDirect(
             ProcessRequest request, String btId, ProcessTimingContext timing,
+            Function<JsonNode, String> hashFn,
             UnaryOperator<T> saver,
             Supplier<T> factory,
             Function<ProcessRequest, ProcessResponse> caller) {
 
-        String hash = hashService.sha256(request.getData());
+        String hash = hashFn.apply(request.getData());
         timing.setBtId(btId);
         timing.setRequestHash(hash);
 
         timing.markDbSearchStart();
-        timing.markDbSearchEnd(false, "CACHE_BYPASS");
+        timing.markDbSearchEnd(false, CACHE_OUTCOME_MISS);
 
-        log.info("Cache data found=false (cache bypassed) bt={} hash={} -> calling downstream", btId, hash);
+        log.info("Cache outcome={} bt={} hash={} -> calling downstream", CACHE_OUTCOME_MISS, btId, hash);
 
         timing.markDownstreamCallStart();
         Instant requestTs = Instant.now();
@@ -98,7 +102,7 @@ public class CacheService {
         row.setRequestTimestamp(requestTs);
         row.setResponseTimestamp(responseTs);
         row.setBtId(btId);
-        saver.apply(row);
+        cacheTransactions.save(saver, row);
         timing.markDbSaveEnd();
 
         return ProcessResponse.builder()
@@ -114,25 +118,28 @@ public class CacheService {
             Supplier<T> factory,
             Function<ProcessRequest, ProcessResponse> caller) {
 
-        String hash = hashService.sha256(request.getData());
+        JsonNode trimmedHashPayload = bureauHashPayloadPreparer.prepare(request.getData());
+        String hash = hashService.sha256(trimmedHashPayload);
+        byte[] hashJsonBytes = writeJson(trimmedHashPayload);
+        log.info("Bureau cache hash computed from trimmed demographic payload bt={} hash={}", btId, hash);
         timing.setBtId(btId);
         timing.setRequestHash(hash);
 
         timing.markDbSearchStart();
-        Optional<T> existing = finder.apply(hash);
+        Optional<T> existing = cacheTransactions.findByHash(finder, hash);
         boolean found = existing.isPresent();
 
         if (found && isFresh(existing.get())) {
-            timing.markDbSearchEnd(true, "FRESH_HIT");
-            log.info("Cache data found=true (fresh) bt={} hash={} -> returning cached response", btId, hash);
+            timing.markDbSearchEnd(true, CACHE_OUTCOME_HIT);
+            log.info("Cache outcome={} bt={} hash={} -> returning cached response",
+                    CACHE_OUTCOME_HIT, btId, hash);
             return response(request, readJson(existing.get().getResponseJson()));
         }
 
-        String outcome = found ? "STALE_HIT" : "MISS";
-        timing.markDbSearchEnd(found, outcome);
+        timing.markDbSearchEnd(found, CACHE_OUTCOME_MISS);
 
-        log.info("Cache data found={} outcome={} bt={} hash={} -> calling downstream",
-                found, outcome, btId, hash);
+        log.info("Cache outcome={} bt={} hash={} foundInDb={} -> calling downstream",
+                CACHE_OUTCOME_MISS, btId, hash, found);
 
         timing.markDownstreamCallStart();
         Instant requestTs = Instant.now();
@@ -149,13 +156,18 @@ public class CacheService {
         timing.markDbSaveStart();
         T row = existing.orElseGet(factory);
         row.setRequestJson(writeJson(request));
+        if (row instanceof BureauTransaction bureauRow) {
+            bureauRow.setHashJson(hashJsonBytes);
+            log.info("Saving full REQUEST_JSON and trimmed HASH_JSON to bureau_bre_details bt={} hash={}",
+                    btId, hash);
+        }
         row.setRequestHash(hash);
         row.setResponseJson(writeJson(body));
         row.setStatus("SUCCESS");
         row.setRequestTimestamp(requestTs);
         row.setResponseTimestamp(responseTs);
         row.setBtId(btId);
-        saver.apply(row);
+        cacheTransactions.save(saver, row);
         timing.markDbSaveEnd();
 
         return ProcessResponse.builder()
@@ -191,7 +203,7 @@ public class CacheService {
     private JsonNode readJson(byte[] bytes) {
         if (bytes == null || bytes.length == 0) return objectMapper.nullNode();
         try {
-            return objectMapper.readTree(new String(bytes, StandardCharsets.UTF_8));
+            return objectMapper.readTree(bytes);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to parse cached response", e);
         }
