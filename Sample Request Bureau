@@ -1,0 +1,50 @@
+{
+    "config": {
+        "orgName": "B2C",
+        "channelName": "B2C",
+        "productName": "PL",
+        "requestId": "a1f71000003kMFBB",
+        "caseId": "a1f71000003kMFBB",
+        "requestedVersion": null,
+        "requestTimestamp": null,
+        "serviceName": "Bureau"
+    },
+    "data": {
+        "demographic": {
+            "caseId": "a1f71000003kMFBB", // to be removed in hash
+            "product": "ZCUC", // to be removed in hash
+            "loanapplication": "WHLU00000020156",  // to be removed in hash
+            "mobile_number": "8308297553",
+            "gender": "Female",
+            "date_of_birth": "1992-05-28",
+            "residential_address": {
+                "address1": "CHOLOTH HOUSE ARATHIPARAMBA EZHILODE PO", // to be removed in hash
+                "address2": "KUNHIMANGALAM KANNUR 670309", // to be removed in hash
+                "address3": "670309", // to be removed in hash
+                "pincode": "670309",
+                "state": "KARNATAKA",
+                "city": "KANNUR"
+            },
+            "ids": [], // check for removal in code
+            "pan": "GBD3716614",
+            "first_name": "Krishna",
+            "middle_name": "",
+            "last_name": "Joshi",
+            "name": null,
+            "driving_licence": null,
+            "voter_id": null,
+            "rashaan_card": null, // to be removed in hash
+            "sourcing_branch": null, // to be removed in hash
+            "sourcing_channel": null, // to be removed in hash
+            "loan_type": null, // to be removed in hash
+            "requested_loan_amount": "150000", // to be removed in hash
+            "program_type": null, // to be removed in hash
+            "constitution": null, // to be removed in hash
+            "customer_type": null, // to be removed in hash
+            "employment_type": null, // to be removed in hash
+            "nature_of_business": null, // to be removed in hash
+            "bureau_source": "CRIF" 
+        }
+    }
+}
+ 
