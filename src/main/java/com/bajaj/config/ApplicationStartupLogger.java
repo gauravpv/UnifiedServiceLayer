@@ -34,6 +34,12 @@ public class ApplicationStartupLogger {
         log.info("Bureau URL: {}", appProperties.getDownstream().getBureauUrl());
         log.info("Dedupe URL: {}", appProperties.getDownstream().getDedupeUrl());
         log.info("Cache staleness days: {}", appProperties.getCache().getStalenessDays());
+        AppProperties.Gateway gateway = appProperties.getGateway();
+        log.info("Gateway OCP key configured: {}", gateway.hasOcpSubKey());
+        log.info("Gateway token configured: {}", gateway.hasTokenCredentials());
+        if (gateway.hasTokenCredentials()) {
+            log.info("Gateway token URL: {}", gateway.getAuthTokenUrl());
+        }
         log.info("========================================");
     }
 }

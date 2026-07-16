@@ -1,16 +1,12 @@
 package com.bajaj.service;
 
 import static com.bajaj.constants.Constants.AUTHORIZATION_HEADER;
-import static com.bajaj.constants.Constants.AUTH_CLIENT_ID;
-import static com.bajaj.constants.Constants.AUTH_CLIENT_SECRET;
-import static com.bajaj.constants.Constants.AUTH_TOKEN_URL;
 import static com.bajaj.constants.Constants.BEARER;
 import static com.bajaj.constants.Constants.CLIENT_CREDENTIALS;
 import static com.bajaj.constants.Constants.CLIENT_ID;
 import static com.bajaj.constants.Constants.CLIENT_SECRET;
 import static com.bajaj.constants.Constants.GRANT_TYPE;
 import static com.bajaj.constants.Constants.OCP_KEY_HEADER;
-import static com.bajaj.constants.Constants.OCP_SUB_KEY;
 import static com.bajaj.constants.Constants.RESOURCE;
 import static com.bajaj.constants.Constants.RESOURCE_URL;
 
@@ -19,13 +15,13 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import com.bajaj.config.AppProperties;
 import com.bajaj.dto.AzureTokenResponse;
 import com.bajaj.dto.ConfigDto;
 import com.bajaj.dto.DownstreamEncryptedRequest;
@@ -46,8 +42,8 @@ import lombok.extern.slf4j.Slf4j;
 public class WebClientService {
 
     private final WebClient downstreamWebClient;
-    private final Environment env;
     private final ObjectMapper objectMapper;
+    private final AppProperties appProperties;
 
     private volatile AzureTokenResponse azureTokenResponse;
     private volatile Instant tokenExpiresAt = Instant.MIN;
@@ -145,26 +141,28 @@ public class WebClientService {
         }
     }
 
-    @SuppressWarnings("null")
     private HttpHeaders getHeaders() {
+        AppProperties.Gateway gateway = appProperties.getGateway();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-        Optional.ofNullable(env.getProperty(OCP_SUB_KEY))
-                .filter(value -> !value.isBlank())
-                .ifPresent(value -> headers.add(OCP_KEY_HEADER, value));
+        if (gateway.hasOcpSubKey()) {
+            headers.add(OCP_KEY_HEADER, gateway.getOcpSubKey());
+        }
         getToken().ifPresent(token -> headers.add(AUTHORIZATION_HEADER, BEARER + token.getAccess_token()));
         return headers;
     }
 
     @SuppressWarnings("null")
     private Optional<AzureTokenResponse> getToken() {
-        String tokenUrl = env.getProperty(AUTH_TOKEN_URL);
-        String clientId = env.getProperty(AUTH_CLIENT_ID);
-        String clientSecret = env.getProperty(AUTH_CLIENT_SECRET);
-        if (isBlank(tokenUrl) || isBlank(clientId) || isBlank(clientSecret)) {
+        AppProperties.Gateway gateway = appProperties.getGateway();
+        if (!gateway.hasTokenCredentials()) {
             return Optional.empty();
         }
+
+        String tokenUrl = gateway.getAuthTokenUrl();
+        String clientId = gateway.getAuthClientId();
+        String clientSecret = gateway.getAuthClientSecret();
         tokenUrl = Objects.requireNonNull(tokenUrl);
         clientId = Objects.requireNonNull(clientId);
         clientSecret = Objects.requireNonNull(clientSecret);
