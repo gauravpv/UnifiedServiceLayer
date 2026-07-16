@@ -150,7 +150,7 @@ public class WebClientService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-        Optional.ofNullable(OCP_SUB_KEY)
+        Optional.ofNullable(env.getProperty(OCP_SUB_KEY))
                 .filter(value -> !value.isBlank())
                 .ifPresent(value -> headers.add(OCP_KEY_HEADER, value));
         getToken().ifPresent(token -> headers.add(AUTHORIZATION_HEADER, BEARER + token.getAccess_token()));
@@ -159,9 +159,9 @@ public class WebClientService {
 
     @SuppressWarnings("null")
     private Optional<AzureTokenResponse> getToken() {
-        String tokenUrl = AUTH_TOKEN_URL;
-        String clientId = AUTH_CLIENT_ID;
-        String clientSecret = AUTH_CLIENT_SECRET;
+        String tokenUrl = env.getProperty(AUTH_TOKEN_URL);
+        String clientId = env.getProperty(AUTH_CLIENT_ID);
+        String clientSecret = env.getProperty(AUTH_CLIENT_SECRET);
         if (isBlank(tokenUrl) || isBlank(clientId) || isBlank(clientSecret)) {
             return Optional.empty();
         }
