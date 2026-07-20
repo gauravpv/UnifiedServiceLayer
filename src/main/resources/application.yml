@@ -1,6 +1,6 @@
 app:
   cache:
-    staleness-days: 30
+    staleness-days: 20
   downstream:
     bureau-url:
     dedupe-url:
